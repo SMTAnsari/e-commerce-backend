@@ -1,21 +1,65 @@
 const Product = require('../models/Product');
+const Order = require('../models/Order');
+const fs = require('fs');
+const path = require('path');
 
-// GET /api/products - public
-exports.getAllProducts = async (req, res) => {
+// @desc    Get admin dashboard stats
+// @route   GET /api/admin/stats
+// @access  Private/Admin
+exports.getAdminStats = async (req, res) => {
   try {
-    const products = await Product.find();
-    res.json(products);
-  } catch (err) {
-    res.status(500).json({ message: 'Failed to fetch products', error: err.message });
+    const [
+      totalProducts,
+      totalOrders,
+      pendingOrders,
+      completedOrders
+    ] = await Promise.all([
+      Product.countDocuments(),
+      Order.countDocuments(),
+      Order.countDocuments({ status: 'pending' }),
+      Order.countDocuments({ status: 'completed' })
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        totalProducts,
+        totalOrders,
+        pendingOrders,
+        completedOrders
+      }
+    });
+  } catch (error) {
+    console.error('Admin stats error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server error while fetching stats'
+    });
   }
 };
 
-// POST /api/products - admin only (add this after auth middleware)
-exports.createProduct = async (req, res) => {
+// @desc    Export orders to CSV
+// @route   GET /api/admin/orders/export
+// @access  Private/Admin
+exports.exportOrdersCSV = async (req, res) => {
   try {
-    const product = await Product.create(req.body);
-    res.status(201).json(product);
-  } catch (err) {
-    res.status(400).json({ message: 'Failed to create product', error: err.message });
+    const orders = await Order.find({})
+      .populate('user', 'name email')
+      .sort({ createdAt: -1 });
+
+    let csv = 'Order ID,Date,Customer,Total,Status\n';
+    orders.forEach(order => {
+      csv += `"${order._id}","${order.createdAt.toISOString()}","${order.user.name}","${order.totalPrice}","${order.status}"\n`;
+    });
+
+    res.header('Content-Type', 'text/csv');
+    res.attachment('orders-export.csv');
+    res.send(csv);
+  } catch (error) {
+    console.error('Order export error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server error during order export'
+    });
   }
 };

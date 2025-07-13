@@ -1,9 +1,8 @@
-// Load environment variables
 require('dotenv').config();
-
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const path = require('path');
 
 // Initialize Express app
 const app = express();
@@ -11,7 +10,10 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
-app.use(express.json()); // Parse JSON request bodies
+app.use(express.json());
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Default Test Route
 app.get('/', (req, res) => {
@@ -28,10 +30,9 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+// Routes
 const orderRoutes = require('./routes/orders');
 app.use('/api/orders', orderRoutes);
-
-
 
 const productRoutes = require('./routes/products');
 app.use('/api/products', productRoutes);
@@ -54,7 +55,6 @@ app.use('/api/payments', paymentRoutes);
 const contactRoutes = require("./routes/contactRoutes");
 app.use("/api/contact", contactRoutes);
 
-
 // MongoDB Connection
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
@@ -65,17 +65,6 @@ mongoose.connect(process.env.MONGO_URI, {
   console.error('❌ MongoDB connection error:', err);
   process.exit(1);
 });
-
-// TODO: Import and use your route files here
-// Example:
-// const authRoutes = require('./routes/auth');
-// app.use('/api/auth', authRoutes);
-
-// const productRoutes = require('./routes/products');
-// app.use('/api/products', productRoutes);
-
-// const orderRoutes = require('./routes/orders');
-// app.use('/api/orders', orderRoutes);
 
 // Start server
 app.listen(PORT, () => {

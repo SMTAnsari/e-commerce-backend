@@ -12,14 +12,23 @@
   "type": "commonjs",
   "dependencies": {
     "bcryptjs": "^3.0.2",
+    "compression": "^1.8.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^7.5.1",
+    "helmet": "^8.1.0",
+    "hpp": "^0.2.3",
     "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.17.0",
     "mongoose": "^8.16.0",
+    "morgan": "^1.10.0",
+    "multer": "^2.0.1",
     "pdfkit": "^0.17.1",
-    "razorpay": "^2.9.6"
+    "razorpay": "^2.9.6",
+    "server": "file:",
+    "xss-clean": "^0.1.4"
   }
 }
