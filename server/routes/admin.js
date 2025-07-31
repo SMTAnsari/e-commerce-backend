@@ -4,7 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const Product = require('../models/Product');
 const { protect, isAdmin } = require('../middleware/authMiddleware');
-const { getAdminStats,exportOrdersCSV } = require('../controllers/adminController');
+const { getAdminStats, exportOrdersCSV } = require('../controllers/adminController');
 const {
   getAllOrders,
   updateOrderStatus,
@@ -12,35 +12,24 @@ const {
   updateProduct,
   deleteProduct
 } = require('../controllers/adminController');
+const { storage } = require('../utils/cloudinary'); // Import Cloudinary storage
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/products/');
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, `product-${uniqueSuffix}${ext}`);
-  }
-});
-
-const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files are allowed!'), false);
-  }
-};
-
-const upload = multer({
+// Configure multer with Cloudinary storage
+const upload = multer({ 
   storage,
-  fileFilter,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'), false);
+    }
+  },
   limits: { fileSize: 5 * 1024 * 1024 } // 5MB
 });
 
 router.get('/orders', protect, isAdmin, getAllOrders);
 router.patch('/orders/:id', protect, isAdmin, updateOrderStatus);
+
 // @desc    Get all products (admin view)
 // @route   GET /api/admin/products
 // @access  Private/Admin
@@ -61,7 +50,6 @@ router.get('/products', protect, isAdmin, async (req, res) => {
   }
 });
 
-
 // @desc    Create a new product
 // @route   POST /api/admin/products
 // @access  Private/Admin
@@ -71,6 +59,8 @@ router.post(
   isAdmin,
   upload.single('image'),
   async (req, res) => {
+    console.log('Request body:', req.body);
+    console.log('Request file:', req.file);
     try {
       const { name, price, stock, type, description } = req.body;
 
@@ -92,7 +82,7 @@ router.post(
         stock: stock ? parseInt(stock) : 0,
         type,
         description,
-        image: `/uploads/products/${req.file.filename}`
+        image: req.file.path // Cloudinary URL
       });
 
       await product.save();
@@ -119,7 +109,6 @@ router.post(
     }
   }
 );
-
 
 // @desc    Update product
 // @route   PUT /api/admin/products/:id
@@ -151,8 +140,12 @@ router.put(
 
       // Update image if new file was uploaded
       if (req.file) {
-        // TODO: Delete old image file from server
-        product.image = `/uploads/products/${req.file.filename}`;
+        // Delete old image from Cloudinary if it exists
+        if (product.image) {
+          const publicId = product.image.split('/').pop().split('.')[0];
+          await cloudinary.uploader.destroy(`buraq-products/${publicId}`);
+        }
+        product.image = req.file.path; // New Cloudinary URL
       }
 
       await product.save();
@@ -196,7 +189,12 @@ router.delete('/products/:id', protect, isAdmin, async (req, res) => {
       });
     }
 
-    // TODO: Delete the associated image file from server
+    // Delete the associated image from Cloudinary if it exists
+    if (product.image) {
+      const publicId = product.image.split('/').pop().split('.')[0];
+      await cloudinary.uploader.destroy(`buraq-products/${publicId}`);
+    }
+
     await product.remove();
 
     res.json({
