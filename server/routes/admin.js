@@ -61,6 +61,66 @@ router.get('/products', protect, isAdmin, async (req, res) => {
   }
 });
 
+
+// @desc    Create a new product
+// @route   POST /api/admin/products
+// @access  Private/Admin
+router.post(
+  '/products',
+  protect,
+  isAdmin,
+  upload.single('image'),
+  async (req, res) => {
+    try {
+      const { name, price, stock, type, description } = req.body;
+
+      // Check for required fields
+      if (!req.file || !name || !price || !type) {
+        return res.status(400).json({
+          message: 'Failed to create product',
+          error: 'Product validation failed: ' +
+            `${!req.file ? 'image: Path `image` is required., ' : ''}` +
+            `${!price ? 'price: Path `price` is required., ' : ''}` +
+            `${!type ? 'type: Path `type` is required., ' : ''}` +
+            `${!name ? 'name: Path `name` is required.' : ''}`
+        });
+      }
+
+      const product = new Product({
+        name,
+        price: parseFloat(price),
+        stock: stock ? parseInt(stock) : 0,
+        type,
+        description,
+        image: `/uploads/products/${req.file.filename}`
+      });
+
+      await product.save();
+
+      res.status(201).json({
+        success: true,
+        data: product
+      });
+    } catch (error) {
+      console.error('Product creation error:', error);
+
+      if (error.name === 'ValidationError') {
+        const messages = Object.values(error.errors).map(val => val.message);
+        return res.status(400).json({
+          message: 'Failed to create product',
+          error: messages.join(', ')
+        });
+      }
+
+      res.status(500).json({
+        message: 'Failed to create product',
+        error: 'Server error during product creation'
+      });
+    }
+  }
+);
+
+
 // @desc    Update product
 // @route   PUT /api/admin/products/:id
 // @access  Private/Admin
