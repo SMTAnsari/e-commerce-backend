@@ -20,3 +20,12 @@ module.exports = {
   cloudinary,
   storage
 };
+
+// Test configuration on startup
+cloudinary.api.ping()
+  .then(response => console.log('✅ Cloudinary connected successfully'))
+  .catch(err => {
+    console.error('❌ Cloudinary connection failed:', err.message);
+    console.error('Check your CLOUDINARY_* environment variables');
+    process.exit(1);
+  });

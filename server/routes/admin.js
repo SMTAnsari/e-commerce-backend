@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const path = require('path');
+const path = require('path'); // Added path module
 const Product = require('../models/Product');
 const { protect, isAdmin } = require('../middleware/authMiddleware');
-const { getAdminStats, exportOrdersCSV } = require('../controllers/adminController');
+const { getAdminStats } = require('../controllers/adminController');
 const {
   getAllOrders,
   updateOrderStatus,
@@ -12,7 +12,28 @@ const {
   updateProduct,
   deleteProduct
 } = require('../controllers/adminController');
-const { storage } = require('../utils/cloudinary'); // Import Cloudinary storage
+const { storage, cloudinary } = require('../utils/cloudinary');
+
+// Helper functions
+const isCloudinaryUrl = (url) => {
+  return url && (url.startsWith('http://') || url.startsWith('https://'));
+};
+
+const extractPublicId = (url) => {
+  if (!url) return null;
+  
+  // Handle Cloudinary URLs
+  if (url.includes('res.cloudinary.com')) {
+    const parts = url.split('/');
+    const uploadIndex = parts.indexOf('upload');
+    if (uploadIndex !== -1) {
+      return parts.slice(uploadIndex + 1).join('/').split('.')[0];
+    }
+  }
+  
+  // Handle local paths
+  return path.basename(url).split('.')[0];
+};
 
 // Configure multer with Cloudinary storage
 const upload = multer({ 
@@ -59,20 +80,21 @@ router.post(
   isAdmin,
   upload.single('image'),
   async (req, res) => {
-    console.log('Request body:', req.body);
-    console.log('Request file:', req.file);
     try {
+      console.log('Received file:', req.file);
+      
+      // Access fields directly from req.body
       const { name, price, stock, type, description } = req.body;
 
       // Check for required fields
       if (!req.file || !name || !price || !type) {
         return res.status(400).json({
-          message: 'Failed to create product',
+          success: false,
           error: 'Product validation failed: ' +
-            `${!req.file ? 'image: Path `image` is required., ' : ''}` +
-            `${!price ? 'price: Path `price` is required., ' : ''}` +
-            `${!type ? 'type: Path `type` is required., ' : ''}` +
-            `${!name ? 'name: Path `name` is required.' : ''}`
+            `${!req.file ? 'Image is required, ' : ''}` +
+            `${!price ? 'Price is required, ' : ''}` +
+            `${!type ? 'Type is required, ' : ''}` +
+            `${!name ? 'Name is required' : ''}`
         });
       }
 
@@ -82,8 +104,13 @@ router.post(
         stock: stock ? parseInt(stock) : 0,
         type,
         description,
-        image: req.file.path // Cloudinary URL
+        image: req.file.path
       });
+      
+      // Bypass validation for Cloudinary URLs
+      if (isCloudinaryUrl(req.file.path)) {
+        product.$ignore('image');
+      }
 
       await product.save();
 
@@ -93,22 +120,41 @@ router.post(
       });
     } catch (error) {
       console.error('Product creation error:', error);
-
+      
       if (error.name === 'ValidationError') {
         const messages = Object.values(error.errors).map(val => val.message);
         return res.status(400).json({
-          message: 'Failed to create product',
+          success: false,
           error: messages.join(', ')
         });
       }
 
       res.status(500).json({
-        message: 'Failed to create product',
-        error: 'Server error during product creation'
+        success: false,
+        error: error.message || 'Server error during product creation'
       });
     }
   }
 );
+
+// Temporary test route
+router.get('/test-cloudinary', async (req, res) => {
+  try {
+    const result = await cloudinary.uploader.upload('https://res.cloudinary.com/demo/image/upload/sample.jpg', {
+      folder: 'buraq-products'
+    });
+    res.json({
+      success: true,
+      result
+    });
+  } catch (err) {
+    console.error('Cloudinary test error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
 
 // @desc    Update product
 // @route   PUT /api/admin/products/:id
@@ -142,10 +188,22 @@ router.put(
       if (req.file) {
         // Delete old image from Cloudinary if it exists
         if (product.image) {
-          const publicId = product.image.split('/').pop().split('.')[0];
-          await cloudinary.uploader.destroy(`buraq-products/${publicId}`);
+          try {
+            const publicId = extractPublicId(product.image);
+            if (publicId) {
+              await cloudinary.uploader.destroy(publicId);
+              console.log(`Deleted old image: ${publicId}`);
+            }
+          } catch (err) {
+            console.error('Error deleting old image:', err);
+          }
         }
         product.image = req.file.path; // New Cloudinary URL
+        
+        // Bypass validation for Cloudinary URLs
+        if (isCloudinaryUrl(req.file.path)) {
+          product.$ignore('image');
+        }
       }
 
       await product.save();
@@ -167,7 +225,7 @@ router.put(
 
       res.status(500).json({
         success: false,
-        error: 'Server error during product update'
+        error: error.message || 'Server error during product update'
       });
     }
   }
@@ -191,11 +249,18 @@ router.delete('/products/:id', protect, isAdmin, async (req, res) => {
 
     // Delete the associated image from Cloudinary if it exists
     if (product.image) {
-      const publicId = product.image.split('/').pop().split('.')[0];
-      await cloudinary.uploader.destroy(`buraq-products/${publicId}`);
+      try {
+        const publicId = extractPublicId(product.image);
+        if (publicId) {
+          await cloudinary.uploader.destroy(publicId);
+          console.log(`Deleted image: ${publicId}`);
+        }
+      } catch (err) {
+        console.error('Error deleting image:', err);
+      }
     }
 
-    await product.remove();
+    await product.deleteOne();
 
     res.json({
       success: true,
@@ -213,7 +278,7 @@ router.delete('/products/:id', protect, isAdmin, async (req, res) => {
 
     res.status(500).json({
       success: false,
-      error: 'Server error during product deletion'
+      error: error.message || 'Server error during product deletion'
     });
   }
 });

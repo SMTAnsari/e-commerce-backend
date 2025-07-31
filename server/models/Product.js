@@ -25,10 +25,18 @@ const productSchema = new mongoose.Schema({
     default: 0,
     min: [0, 'Stock cannot be negative']
   },
-  image: { 
-    type: String, 
-    required: [true, 'Product image is required']
-  },
+  // In models/Product.js
+image: { 
+  type: String, 
+  required: [true, 'Product image is required'],
+  validate: {
+    validator: function(v) {
+      // Accept both Cloudinary URLs and local paths
+      return /^(https?:\/\/|\.?\/)/.test(v);
+    },
+    message: props => `${props.value} is not a valid image URL!`
+  }
+},
   description: { 
     type: String, 
     trim: true,
