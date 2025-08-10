@@ -15,6 +15,16 @@ app.use(express.json());
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Global JSON error handler
+app.use((err, req, res, next) => {
+  console.error('Global error handler caught:', err);
+  res.status(err.status || 500).json({
+    success: false,
+    error: err.message || 'Server error',
+  });
+});
+
+
 // Default Test Route
 app.get('/', (req, res) => {
   res.send('🚀 Welcome to the E-Commerce API');
